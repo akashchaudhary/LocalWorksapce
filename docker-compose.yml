@@ -55,11 +55,9 @@ services:
     restart: always
 
   analyzer:
-    image: reportportal/service-auto-analyzer:5.7.5
+    image: reportportal/service-auto-analyzer:5.6.0
     environment:
       LOGGING_LEVEL: info
-      AMQP_EXCHANGE_NAME: analyzer-default
-      AMQP_VIRTUAL_HOST: analyzer
       AMQP_URL: amqp://rabbitmq:rabbitmq@rabbitmq:5672
       ES_HOSTS: http://elastic:elastic1q2w3e@elasticsearch:9200
       MINIO_SHORT_HOST: minio:9000
@@ -70,11 +68,9 @@ services:
     restart: always
 
   analyzer_train: #an analyzer instance for training, don't forget to setup the same storage(either minio, or filesystem) as for main analyzer
-    image: reportportal/service-auto-analyzer:5.7.5
+    image: reportportal/service-auto-analyzer:5.6.0
     environment:
       LOGGING_LEVEL: info
-      AMQP_EXCHANGE_NAME: analyzer-default
-      AMQP_VIRTUAL_HOST: analyzer
       AMQP_URL: amqp://rabbitmq:rabbitmq@rabbitmq:5672
       ES_HOSTS: http://elastic:elastic1q2w3e@elasticsearch:9200
       MINIO_SHORT_HOST: minio:9000
@@ -83,14 +79,11 @@ services:
       INSTANCE_TASK_TYPE: train
       UWSGI_WORKERS: 1
     depends_on:
-      elasticsearch:
-        condition: service_started
-      rabbitmq:
-        condition: service_healthy
+      - elasticsearch
     restart: always 
 
   metrics-gatherer: # metrics service for analyzing how analyzer is working and manage retrained models
-    image: reportportal/service-metrics-gatherer:5.7.4
+    image: reportportal/service-metrics-gatherer:1.1.17
     environment:
       LOGGING_LEVEL: info
       ES_HOST: http://elasticsearch:9200
@@ -121,7 +114,7 @@ services:
     restart: on-failure
 
   rabbitmq:
-    image: bitnami/rabbitmq:3.10.8-debian-11-r7
+    image: rabbitmq:3.7.16-management
     environment:
       RABBITMQ_DEFAULT_USER: "rabbitmq"
       RABBITMQ_DEFAULT_PASS: "rabbitmq"
@@ -131,26 +124,17 @@ services:
     restart: always
 
   uat:
-    image: reportportal/service-authorization:5.8.0
+    image: reportportal/service-authorization:5.6.3
     environment:
-      RP_DB_HOST=${DB_HOST}
-      RP_DB_USER=${DATABASE_USER}
-      RP_DB_PASS=${DATABASE_PASSWORD}
-      RP_DB_NAME=${DATABASE_NAME}
-      RP_BINARYSTORE_TYPE: minio
-      RP_BINARYSTORE_MINIO_ENDPOINT: http://minio:9000
-      RP_BINARYSTORE_MINIO_ACCESSKEY: minio
-      RP_BINARYSTORE_MINIO_SECRETKEY: minio123
-      RP_SESSION_LIVE: 86400 # in seconds
-      RP_SAML_SESSION-LIVE: 4320
-      ## The initial password for superadmin user on FIRST launch. If the password was changed from the UI, this value can't change the password on redeployments.
-      RP_INITIAL_ADMIN_PASSWORD: "erebus"
-    healthcheck:
-      test: curl -f http://0.0.0.0:9999/health
-      interval: 60s
-      timeout: 30s
-      retries: 10
-      start_period: 60s
+      - RP_DB_HOST=${DB_HOST}
+      - RP_DB_USER=${DATABASE_USER}
+      - RP_DB_PASS=${DATABASE_PASSWORD}
+      - RP_DB_NAME=${DATABASE_NAME}
+      - RP_BINARYSTORE_TYPE=minio
+      - RP_BINARYSTORE_MINIO_ENDPOINT=http://minio:9000
+      - RP_BINARYSTORE_MINIO_ACCESSKEY=minio
+      - RP_BINARYSTORE_MINIO_SECRETKEY=minio123
+      - RP_SESSION_LIVE=86400 #in seconds
     labels:
       - "traefik.http.middlewares.uat-strip-prefix.stripprefix.prefixes=/uat"
       - "traefik.http.routers.uat.middlewares=uat-strip-prefix@docker"
@@ -160,9 +144,9 @@ services:
       - "traefik.http.services.uat.loadbalancer.server.scheme=http"
       - "traefik.expose=true"
     restart: always
-        
+
   index:
-    image: reportportal/service-index:5.8.0
+    image: reportportal/service-index:5.0.11
     depends_on:
       gateway:
         condition: service_started
@@ -178,35 +162,27 @@ services:
     restart: always
 
   api:
-    image: reportportal/service-api:5.8.0
+    image: reportportal/service-api:5.6.3
     depends_on:
       rabbitmq:
         condition: service_healthy
       gateway:
         condition: service_started
     environment:
-      RP_ELASTICSEARCHLOGMESSAGE_HOST: "true"
-      RP_DB_HOST=${DB_HOST}
-      RP_DB_USER=${DATABASE_USER}
-      RP_DB_PASS=${DATABASE_PASSWORD}
-      RP_DB_NAME=${DATABASE_NAME}
-      RP_AMQP_USER: rabbitmq
-      RP_AMQP_PASS: rabbitmq
-      RP_AMQP_APIUSER: rabbitmq
-      RP_AMQP_APIPASS: rabbitmq
-      RP_AMQP_ANALYZER-VHOST: analyzer
-      RP_BINARYSTORE_TYPE: minio
-      RP_BINARYSTORE_MINIO_ENDPOINT: http://minio:9000
-      RP_BINARYSTORE_MINIO_ACCESSKEY: minio
-      RP_BINARYSTORE_MINIO_SECRETKEY: minio123
-      LOGGING_LEVEL_ORG_HIBERNATE_SQL=info
-      JAVA_OPTS: -Xmx1g -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp  -Dcom.sun.management.jmxremote.rmi.port=12349 -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.local.only=false  -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=0.0.0.0
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://0.0.0.0:8585/health || exit 1
-      interval: 60s
-      timeout: 30s
-      retries: 10
-      start_period: 60s
+      - RP_DB_HOST=${DB_HOST}
+      - RP_DB_USER=${DATABASE_USER}
+      - RP_DB_PASS=${DATABASE_PASSWORD}
+      - RP_DB_NAME=${DATABASE_NAME}
+      - RP_AMQP_USER=rabbitmq
+      - RP_AMQP_PASS=rabbitmq
+      - RP_AMQP_APIUSER=rabbitmq
+      - RP_AMQP_APIPASS=rabbitmq
+      - RP_BINARYSTORE_TYPE=minio
+      - RP_BINARYSTORE_MINIO_ENDPOINT=http://minio:9000
+      - RP_BINARYSTORE_MINIO_ACCESSKEY=minio
+      - RP_BINARYSTORE_MINIO_SECRETKEY=minio123
+      - LOGGING_LEVEL_ORG_HIBERNATE_SQL=info
+      - JAVA_OPTS=-Xmx1g -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp  -Dcom.sun.management.jmxremote.rmi.port=12349 -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.local.only=false  -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=0.0.0.0
     labels:
       - "traefik.http.middlewares.api-strip-prefix.stripprefix.prefixes=/api"
       - "traefik.http.routers.api.middlewares=api-strip-prefix@docker"
@@ -218,16 +194,13 @@ services:
     restart: always
 
   jobs:
-    image: reportportal/service-jobs:5.8.0
+    image: reportportal/service-jobs:5.6.3
     depends_on:
       rabbitmq:
         condition: service_healthy
       gateway:
         condition: service_started
     environment:
-      RP_ELASTICSEARCH_HOST: http://elasticsearch:9200
-      RP_ELASTICSEARCH_USERNAME: elastic
-      RP_ELASTICSEARCH_PASSWORD:  elastic1q2w3e
       RP_DB_HOST: ${DB_HOST}
       RP_DB_USER: ${DATABASE_USER}
       RP_DB_PASS: ${DATABASE_PASSWORD}
@@ -236,31 +209,15 @@ services:
       RP_AMQP_PASS: rabbitmq
       RP_AMQP_APIUSER: rabbitmq
       RP_AMQP_APIPASS: rabbitmq
-      RP_AMQP_ANALYZER-VHOST: analyzer
-      DATASTORE_TYPE: minio
-      DATASTORE_MINIO_ENDPOINT: http://minio:9000
-      DATASTORE_MINIO_ACCESSKEY: minio
-      DATASTORE_MINIO_SECRETKEY: minio123
+      RP_BINARYSTORE_TYPE: minio
+      RP_BINARYSTORE_MINIO_ENDPOINT: http://minio:9000
+      RP_BINARYSTORE_MINIO_ACCESSKEY: minio
+      RP_BINARYSTORE_MINIO_SECRETKEY: minio123
       RP_ENVIRONMENT_VARIABLE_CLEAN_ATTACHMENT_CRON: 0 0 */24 * * *
       RP_ENVIRONMENT_VARIABLE_CLEAN_LOG_CRON: 0 0 */24 * * *
       RP_ENVIRONMENT_VARIABLE_CLEAN_LAUNCH_CRON: 0 0 */24 * * *
       RP_ENVIRONMENT_VARIABLE_CLEAN_STORAGE_CRON: 0 0 */24 * * *
       RP_ENVIRONMENT_VARIABLE_STORAGE_PROJECT_CRON: 0 */5 * * * *
-      RP_ENVIRONMENT_VARIABLE_CLEAN_ATTACHMENT_CRON: 0 0 */24 * * *
-      RP_ENVIRONMENT_VARIABLE_CLEAN_LOG_CRON: 0 0 */24 * * *
-      RP_ENVIRONMENT_VARIABLE_CLEAN_LAUNCH_CRON: 0 0 */24 * * *
-      RP_ENVIRONMENT_VARIABLE_CLEAN_STORAGE_CRON: 0 0 */24 * * *
-      RP_ENVIRONMENT_VARIABLE_STORAGE_PROJECT_CRON: 0 */5 * * * *
-      RP_ENVIRONMENT_VARIABLE_CLEAN_STORAGE_CHUNKSIZE: 1000
-      RP_PROCESSING_LOG_MAXBATCHSIZE: 2000
-      RP_PROCESSING_LOG_MAXBATCHTIMEOUT: 6000
-      RP_AMQP_MAXLOGCONSUMER: 1
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://0.0.0.0:8686/health || exit 1
-      interval: 60s
-      timeout: 30s
-      retries: 10
-      start_period: 60s
     labels:
     - traefik.http.middlewares.jobs-strip-prefix.stripprefix.prefixes=/jobs
     - traefik.http.routers.jobs.middlewares=jobs-strip-prefix@docker
@@ -270,7 +227,7 @@ services:
     - traefik.http.services.jobs.loadbalancer.server.scheme=http
     - traefik.expose=true
   ui:
-    image: reportportal/service-ui:5.8.0
+    image: reportportal/service-ui:5.6.0
     environment:
       - RP_SERVER_PORT=8080
     labels:
@@ -283,7 +240,7 @@ services:
       - "traefik.expose=true"
     restart: always
     
- minio:
+  minio:
     image: minio/minio:RELEASE.2020-10-27T04-03-55Z
     #ports:
     #  - '9000:9000'
@@ -302,3 +259,4 @@ services:
       timeout: 20s
       retries: 3
     restart: always
+
